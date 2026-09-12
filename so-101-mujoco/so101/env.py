@@ -1,0 +1,134 @@
+"""SO-101 Reach Gymnasium Environment."""
+
+from pathlib import Path
+from typing import Any
+
+import gymnasium as gym
+import mujoco
+import numpy as np
+from gymnasium import spaces
+
+from so101.robot import SO101Robot
+
+
+class SO101ReachEnv(gym.Env):
+    """Gymnasium environment for target reaching with SO-101 6-DOF arm.
+
+    Attributes:
+        robot: The underlying SO-101 robot controller wrapper.
+        render_mode: The rendering mode for the environment.
+        max_episode_steps: The maximum number of steps allowed per episode.
+        current_step: The current step index in the episode.
+        action_space: The action space bounded to joint delta position commands.
+        observation_space: The observation space combining joints, end effector, and target.
+    """
+
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 50}
+
+    def __init__(
+        self,
+        xml_path: str | None = None,
+        render_mode: str | None = None,
+        max_episode_steps: int = 200,
+    ):
+        """Initialize the SO-101 Reach environment.
+
+        Args:
+            xml_path: Path to the custom MuJoCo scene XML file. If None, default is used.
+            render_mode: Render mode (e.g., 'human' or 'rgb_array').
+            max_episode_steps: Maximum number of simulation steps per episode.
+        """
+        super().__init__()
+        if xml_path is None:
+            xml_path = str(Path(__file__).parent.parent / "assets" / "scene.xml")
+
+        self.robot = SO101Robot(xml_path=xml_path)
+        self.render_mode = render_mode
+        self.max_episode_steps = max_episode_steps
+        self.current_step = 0
+
+        # Action: 6 delta joint position commands
+        self.action_space = spaces.Box(low=-0.05, high=0.05, shape=(6,), dtype=np.float32)
+
+        # Observation: joint_pos (6) + joint_vel (6) + ee_pos (3) + target_pos (3)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(18,), dtype=np.float32)
+
+    def _get_obs(self) -> np.ndarray:
+        """Construct the observation vector from current simulation state.
+
+        Returns:
+            A concatenated numpy array of joint positions, velocities, end-effector position,
+            and target position.
+        """
+        qpos = self.robot.get_joint_positions()
+        qvel = self.robot.get_joint_velocities()
+        ee_pos, _ = self.robot.get_end_effector_pose()
+        target_pos = self.robot.data.body("target").xpos.copy()
+        return np.concatenate([qpos, qvel, ee_pos, target_pos]).astype(np.float32)
+
+    def reset(
+        self,
+        *,
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Reset the environment to the initial HOME pose and randomize target.
+
+        Args:
+            seed: Random seed for initializing target generation and environment state.
+            options: Additional option parameters for environment reset.
+
+        Returns:
+            A tuple containing the initial observation array and an info dictionary.
+        """
+        super().reset(seed=seed)
+        self.current_step = 0
+
+        self.robot.reset("HOME")
+
+        # Randomize target position slightly in front of the robot on the floor
+        if seed is not None:
+            np.random.seed(seed)
+        rand_offset = np.random.uniform([-0.03, -0.04, 0.0], [0.03, 0.04, 0.0])
+        base_target = np.array([0.18, 0.0, 0.015])
+        self.robot.data.body("target").xpos[:] = base_target + rand_offset
+
+        mujoco.mj_forward(self.robot.model, self.robot.data)
+        obs = self._get_obs()
+        return obs, {}
+
+    def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
+        """Advance the environment simulation by applying action delta commands.
+
+        Args:
+            action: Delta joint position commands of shape (6,).
+
+        Returns:
+            A tuple of (observation, reward, terminated, truncated, info dictionary).
+        """
+        self.current_step += 1
+
+        # Apply delta action to joint positions
+        current_qpos = self.robot.get_joint_positions()
+        target_qpos = current_qpos + action
+        self.robot.set_joint_positions(target_qpos)
+
+        # Step physics sub-steps
+        self.robot.step(num_steps=10)
+
+        obs = self._get_obs()
+        ee_pos = obs[12:15]
+        target_pos = obs[15:18]
+
+        dist = float(np.linalg.norm(ee_pos - target_pos))
+        reward = -dist - 0.01 * float(np.linalg.norm(action))
+
+        success = dist < 0.03
+        if success:
+            reward += 10.0
+
+        terminated = success
+        truncated = self.current_step >= self.max_episode_steps
+
+        info = {"distance": dist, "success": success}
+        return obs, reward, terminated, truncated, info
