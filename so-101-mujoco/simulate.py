@@ -120,6 +120,7 @@ def main() -> None:
     auto_phase_start_time = time.time()
     auto_phase_start_ctrl = data.ctrl.copy()
     auto_phase_target_ctrl = auto_targets[AUTO_SEQUENCE[auto_phase_index]].copy()
+    previous_sim_time = data.time
 
     def begin_auto_phase(now: float) -> None:
         """Start the next automatic pose phase."""
@@ -129,6 +130,15 @@ def main() -> None:
         auto_phase_start_ctrl = data.ctrl.copy()
         auto_phase_target_ctrl = auto_targets[pose_name].copy()
         print(f"[AUTO] Phase {auto_phase_index + 1}/{len(AUTO_SEQUENCE)}: {pose_name}")
+
+    def restart_auto_sequence(now: float) -> None:
+        """Restart the automatic pose sequence after a viewer reset."""
+        nonlocal auto_phase_index, auto_running, previous_sim_time
+        auto_running = True
+        auto_phase_index = 0
+        previous_sim_time = data.time
+        print("[AUTO] Viewer reset detected; restarting HOME -> REACH -> HOME.")
+        begin_auto_phase(now)
 
     begin_auto_phase(auto_phase_start_time)
 
@@ -168,6 +178,9 @@ def main() -> None:
                 step_start = time.time()
                 now = time.time()
 
+                if data.time < previous_sim_time:
+                    restart_auto_sequence(now)
+
                 if auto_running:
                     pose_name = AUTO_SEQUENCE[auto_phase_index]
                     duration = (
@@ -193,6 +206,9 @@ def main() -> None:
 
                 mujoco.mj_step(model, data)
                 viewer.sync()
+                if data.time < previous_sim_time:
+                    restart_auto_sequence(time.time())
+                previous_sim_time = data.time
 
                 time_until_next_step = model.opt.timestep - (time.time() - step_start)
                 if time_until_next_step > 0:
