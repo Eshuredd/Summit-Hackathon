@@ -13,9 +13,13 @@ import numpy as np
 
 from so101.robot import ACTUATOR_NAMES, PRESET_POSES, SO101Robot
 
-AUTO_SEQUENCE = ("HOME", "REACH", "HOME")
+AUTO_SEQUENCE = ("HOME", "REACH", "OPEN_GRIPPER", "CLOSE_GRIPPER", "HOME")
 AUTO_MOVE_SECONDS = 1.5
 AUTO_HOLD_SECONDS = 0.6
+GRIPPER_OPEN_VALUE = 0.0
+GRIPPER_CLOSED_VALUE = -0.1
+
+
 
 
 def ensure_mjpython() -> None:
@@ -72,16 +76,31 @@ def get_named_pose_target(model: mujoco.MjModel, pose_name: str) -> np.ndarray:
     return np.array([target_by_actuator[model.actuator(i).name] for i in range(model.nu)])
 
 
+def get_gripper_target(
+    model: mujoco.MjModel,
+    base_pose_name: str,
+    gripper_value: float,
+) -> np.ndarray:
+    """Return a base pose target with only the gripper actuator changed."""
+    target = get_named_pose_target(model, base_pose_name)
+    gripper_actuator_id = model.actuator("gripper").id
+    target[gripper_actuator_id] = gripper_value
+    return target
+
+
 def get_validated_auto_targets(model: mujoco.MjModel) -> dict[str, np.ndarray]:
     """Validate automatic sequence targets against MuJoCo actuator control limits."""
-    targets = {}
+    targets = {
+        "HOME": get_named_pose_target(model, "HOME"),
+        "REACH": get_named_pose_target(model, "REACH"),
+        "OPEN_GRIPPER": get_gripper_target(model, "REACH", GRIPPER_OPEN_VALUE),
+        "CLOSE_GRIPPER": get_gripper_target(model, "REACH", GRIPPER_CLOSED_VALUE),
+    }
     ctrl_min = model.actuator_ctrlrange[:, 0]
     ctrl_max = model.actuator_ctrlrange[:, 1]
-    for pose_name in AUTO_SEQUENCE:
-        target = get_named_pose_target(model, pose_name)
+    for pose_name, target in targets.items():
         if np.any(target < ctrl_min) or np.any(target > ctrl_max):
             raise ValueError(f"Preset pose {pose_name} exceeds actuator control limits")
-        targets[pose_name] = target
     return targets
 
 
@@ -137,7 +156,7 @@ def main() -> None:
         auto_running = True
         auto_phase_index = 0
         previous_sim_time = data.time
-        print("[AUTO] Viewer reset detected; restarting HOME -> REACH -> HOME.")
+        print("[AUTO] Viewer reset detected; restarting HOME -> REACH -> gripper -> HOME.")
         begin_auto_phase(now)
 
     begin_auto_phase(auto_phase_start_time)
@@ -160,14 +179,14 @@ def main() -> None:
             print(f"Moving robot to preset pose: {pose_name}")
             target_qpos = PRESET_POSES[pose_name].copy()
             if not gripper_open:
-                target_qpos[-1] = 0.3
+                target_qpos[-1] = -0.1
             robot.set_joint_positions(target_qpos)
         elif keycode == 32:  # Spacebar
             gripper_open = not gripper_open
             state_str = "OPEN" if gripper_open else "CLOSED"
             print(f"Toggling Gripper -> {state_str}")
             cur_ctrl = robot.data.ctrl.copy()
-            cur_ctrl[-1] = 0.0 if gripper_open else 0.3
+            cur_ctrl[-1] = GRIPPER_OPEN_VALUE if gripper_open else GRIPPER_CLOSED_VALUE
             robot.set_joint_positions(cur_ctrl)
 
     try:
