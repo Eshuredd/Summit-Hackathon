@@ -2,17 +2,45 @@
 
 import argparse
 import json
+import sys
 import time
+import tomllib
 from pathlib import Path
 
 import mujoco
 import mujoco.viewer
 import numpy as np
+import scipy
 
 import simulate as grasp
 from pick_place import PickPlace
 
 ASSETS = Path(__file__).parent / "assets"
+
+
+def check_runtime():
+    """Reject a mismatched physics/planning stack before running the locked trajectory."""
+    versions = {"mujoco": mujoco.__version__, "numpy": np.__version__, "scipy": scipy.__version__}
+    locked = tomllib.loads((ASSETS.parent / "uv.lock").read_text())
+    expected = {p["name"]: p["version"] for p in locked["package"] if p["name"] in versions}
+    print(f"Python executable: {sys.executable}")
+    print("Runtime: " + ", ".join(f"{name}={version}" for name, version in versions.items()))
+    mismatches = [
+        f"{name}: found {version}, lock requires {expected.get(name)}"
+        for name, version in versions.items()
+        if expected.get(name) != version
+    ]
+    if mismatches:
+        raise ValueError(
+            "Runtime differs from the validated project uv.lock: "
+            + "; ".join(mismatches)
+            + "\nUse this project's interpreter, not the parent bindGIT environment:"
+            + f'\n  & "{ASSETS.parent / ".venv" / "Scripts" / "python.exe"}" '
+            + f'"{Path(__file__).resolve()}" '
+            + " ".join(sys.argv[1:])
+            + "\nOr create/sync the project environment with uv sync --frozen."
+        )
+    return dict(executable=sys.executable, versions=versions)
 
 
 class ArmBackend:
@@ -101,6 +129,10 @@ def main():
     args = parser.parse_args()
     if args.runs < 1:
         parser.error("--runs must be positive")
+    try:
+        runtime = check_runtime()
+    except ValueError as error:
+        parser.error(str(error))
     model = mujoco.MjModel.from_xml_path(str(ASSETS / "dual_scene.xml"))
     data = mujoco.MjData(model)
     verify_layout(model)
@@ -164,7 +196,7 @@ def main():
             controller.failure = str(error)
         finally:
             result = controller.validate()
-            result.update(arm=args.arm, max_inactive_home_error=max_idle_error)
+            result.update(arm=args.arm, max_inactive_home_error=max_idle_error, runtime=runtime)
             results.append(result)
             print(f"Inactive HOME max joint error: {max_idle_error:.6f} rad")
             if viewer:

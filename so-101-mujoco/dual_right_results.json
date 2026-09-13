@@ -24,7 +24,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     },
     {
       "success": true,
@@ -47,7 +55,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     },
     {
       "success": true,
@@ -70,7 +86,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     },
     {
       "success": true,
@@ -93,7 +117,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     },
     {
       "success": true,
@@ -116,7 +148,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     },
     {
       "success": true,
@@ -139,7 +179,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     },
     {
       "success": true,
@@ -162,7 +210,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     },
     {
       "success": true,
@@ -185,7 +241,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     },
     {
       "success": true,
@@ -208,7 +272,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     },
     {
       "success": true,
@@ -231,7 +303,15 @@
       "final_z": 0.014970907574062223,
       "failure": null,
       "arm": "right",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     }
   ]
 }
