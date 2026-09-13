@@ -260,6 +260,7 @@ def cube_contacts_fixed_and_moving_jaw(
     model: mujoco.MjModel,
     data: mujoco.MjData,
     cube_geom_id: int,
+    allowed_geom_ids: set[int] | None = None,
 ) -> bool:
     """Return whether the cube touches both fixed side and moving jaw geoms."""
     contacted_roles = set()
@@ -278,6 +279,8 @@ def cube_contacts_fixed_and_moving_jaw(
         if force[0] <= 1e-4:
             continue
         other_geom = geom2 if geom1 == cube_geom_id else geom1
+        if allowed_geom_ids is not None and other_geom not in allowed_geom_ids:
+            continue
         role = describe_gripper_geom(model, other_geom)
         if role not in {"fixed gripper-side structure", "moving jaw"}:
             continue

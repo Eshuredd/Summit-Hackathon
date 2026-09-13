@@ -17,12 +17,13 @@ import simulate as grasp
 class PickPlace:
     """Execute one physical pick/place cycle without modifying grasp geometry."""
 
-    def __init__(self, model, data, destination):
+    def __init__(self, model, data, destination, backend=grasp):
         """Initialize a cycle from the reset scene and desired cube-center destination."""
+        self.grasp = backend
         self.model, self.data = model, data
         self.destination = np.asarray(destination, dtype=float)
-        self.cube = grasp.get_cube_geom_id(model)
-        self.site = grasp.get_end_effector_site_id(model)
+        self.cube = self.grasp.get_cube_geom_id(model)
+        self.site = self.grasp.get_end_effector_site_id(model)
         self.cube_dof = int(model.jnt_dofadr[model.joint("target_joint").id])
         self.table_z = float(model.geom("floor").pos[2])
         self.initial = data.body("target").xpos.copy()
@@ -47,7 +48,7 @@ class PickPlace:
         start = self.data.ctrl.copy()
         count = int(np.ceil(duration / self.model.opt.timestep))
         for i in range(count):
-            if held and not grasp.cube_contacts_fixed_and_moving_jaw(
+            if held and not self.grasp.cube_contacts_fixed_and_moving_jaw(
                 self.model, self.data, self.cube
             ):
                 raise RuntimeError(f"Opposing pad contact lost during {name}")
@@ -61,24 +62,26 @@ class PickPlace:
 
     def cartesian_target(self, position, seed, opening):
         """Solve a site target using the existing grasp IK implementation."""
-        return grasp.solve_site_position_ik(self.model, self.site, position, seed, opening)
+        return self.grasp.solve_site_position_ik(self.model, self.site, position, seed, opening)
 
     def sequence(self):
         """Run the successful grasp, then transfer, lower, release, and retreat."""
         with contextlib.redirect_stdout(io.StringIO()):
-            targets = grasp.get_validated_auto_targets(self.model, self.data, self.site)
-        for name in grasp.AUTO_SEQUENCE:
-            duration = grasp.AUTO_VERIFY_HOLD_SECONDS if name == "GRASP_DEPTH" else 1.5
+            targets = self.grasp.get_validated_auto_targets(self.model, self.data, self.site)
+        for name in self.grasp.AUTO_SEQUENCE:
+            duration = self.grasp.AUTO_VERIFY_HOLD_SECONDS if name == "GRASP_DEPTH" else 1.5
             if name == "CLOSE_GRIPPER":
-                duration = grasp.GRIPPER_CLOSE_SECONDS
+                duration = self.grasp.GRIPPER_CLOSE_SECONDS
             yield from self.move(name, targets[name], duration, held=name == "LIFT")
             if name == "CLOSE_GRIPPER":
-                tracker = grasp.GraspContactTracker()
+                tracker = self.grasp.GraspContactTracker()
                 confirmed = False
-                for _ in range(int(grasp.GRASP_SETTLE_SECONDS / self.model.opt.timestep)):
+                for _ in range(int(self.grasp.GRASP_SETTLE_SECONDS / self.model.opt.timestep)):
                     confirmed = tracker.update(
                         self.data.time,
-                        grasp.cube_contacts_fixed_and_moving_jaw(self.model, self.data, self.cube),
+                        self.grasp.cube_contacts_fixed_and_moving_jaw(
+                            self.model, self.data, self.cube
+                        ),
                     )
                     if confirmed:
                         break
@@ -91,7 +94,7 @@ class PickPlace:
         above_cube = self.destination.copy()
         above_cube[2] = max(self.data.body("target").xpos[2], self.table_z + 0.065)
         above = self.cartesian_target(
-            above_cube + offset, self.data.ctrl, grasp.GRIPPER_CLOSED_VALUE
+            above_cube + offset, self.data.ctrl, self.grasp.GRIPPER_CLOSED_VALUE
         )
         yield from self.move("ABOVE_TARGET", above, 3.0, held=True)
 
@@ -99,7 +102,7 @@ class PickPlace:
         resting_cube = self.destination.copy()
         resting_cube[2] += 0.002
         lower = self.cartesian_target(
-            resting_cube + offset, self.data.ctrl, grasp.GRIPPER_CLOSED_VALUE
+            resting_cube + offset, self.data.ctrl, self.grasp.GRIPPER_CLOSED_VALUE
         )
         yield from self.move("LOWER_TO_TARGET", lower, 4.0, held=True)
         yield from self.move("SETTLE_AT_TARGET", lower, 0.5)
@@ -110,13 +113,15 @@ class PickPlace:
             or np.linalg.norm(self.data.qvel[self.cube_dof : self.cube_dof + 3]) > 0.02
         ):
             raise RuntimeError("Release blocked: cube is not safely near the target surface")
-        release = grasp.get_gripper_target(self.model, lower, grasp.GRIPPER_OPEN_VALUE)
+        release = self.grasp.get_gripper_target(self.model, lower, self.grasp.GRIPPER_OPEN_VALUE)
         yield from self.move("OPEN_GRIPPER_AT_TARGET", release, 3.0)
         yield from self.move("RELEASE_SETTLE", release, 1.0)
         retreat_pos = self.data.site_xpos[self.site].copy() + [0, 0, 0.08]
-        retreat = self.cartesian_target(retreat_pos, release, grasp.GRIPPER_OPEN_VALUE)
+        retreat = self.cartesian_target(retreat_pos, release, self.grasp.GRIPPER_OPEN_VALUE)
         yield from self.move("RETREAT", retreat, 3.0)
-        home = grasp.get_gripper_target(self.model, targets["HOME"], grasp.GRIPPER_OPEN_VALUE)
+        home = self.grasp.get_gripper_target(
+            self.model, targets["HOME"], self.grasp.GRIPPER_OPEN_VALUE
+        )
         yield from self.move("HOME", home, 3.0)
         yield from self.move("FINAL_SETTLE", home, 1.0)
 
