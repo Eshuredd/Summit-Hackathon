@@ -34,6 +34,30 @@ LIFT_Z_OFFSET = 0.05
 GRASP_SITE_OFFSET_ABOVE_JAW_MIDPOINT = 0.006
 GRIPPING_SURFACE_Z_BAND = 0.005
 JAW_ALIGNMENT_TOLERANCE = 0.005
+GRASP_CONTACT_HOLD_SECONDS = 0.2
+GRIPPER_CLOSE_SECONDS = 3.0
+GRASP_SETTLE_SECONDS = 2.0
+
+
+class GraspContactTracker:
+    """Track uninterrupted opposing pad contact in simulation time."""
+
+    def __init__(self) -> None:
+        """Start with no confirmed contact."""
+        self.since = None
+
+    def update(self, now: float, contact: bool) -> bool:
+        """Return true only after the required continuous contact interval.
+
+        Args:
+            now: Current simulation time in seconds.
+            contact: Whether both opposing inner pads carry contact force.
+        """
+        if not contact:
+            self.since = None
+        elif self.since is None or now < self.since:
+            self.since = now
+        return self.since is not None and now - self.since >= GRASP_CONTACT_HOLD_SECONDS
 
 
 def ensure_mjpython() -> None:
@@ -167,7 +191,7 @@ def get_fixed_gripping_geom_id(model: mujoco.MjModel) -> int:
     for geom_id in get_finger_collision_geom_ids(model):
         mesh_id = int(model.geom_dataid[geom_id])
         mesh_name = model.mesh(mesh_id).name if mesh_id >= 0 else ""
-        if mesh_name == "wrist_roll_follower_so101_v1":
+        if mesh_name == "fixed_pad_5":
             return geom_id
     raise ValueError("Could not find fixed gripping surface geom")
 
@@ -177,7 +201,7 @@ def get_moving_gripping_geom_id(model: mujoco.MjModel) -> int:
     for geom_id in get_finger_collision_geom_ids(model):
         mesh_id = int(model.geom_dataid[geom_id])
         mesh_name = model.mesh(mesh_id).name if mesh_id >= 0 else ""
-        if mesh_name == "moving_jaw_so101_v1":
+        if mesh_name == "moving_pad_0":
             return geom_id
     raise ValueError("Could not find moving jaw geom")
 
@@ -195,9 +219,9 @@ def describe_gripper_geom(model: mujoco.MjModel, geom_id: int) -> str:
     mesh_name = model.mesh(mesh_id).name if mesh_id >= 0 else ""
     if mesh_name == "sts3215_03a_v1":
         return "servo housing / palm-side gripper body"
-    if mesh_name == "wrist_roll_follower_so101_v1":
+    if mesh_name.startswith("fixed_pad_"):
         return "fixed gripper-side structure"
-    if mesh_name == "moving_jaw_so101_v1":
+    if mesh_name.startswith("moving_pad_"):
         return "moving jaw"
     return "other"
 
@@ -239,15 +263,39 @@ def cube_contacts_fixed_and_moving_jaw(
 ) -> bool:
     """Return whether the cube touches both fixed side and moving jaw geoms."""
     contacted_roles = set()
+    # Local +X points into the gap from the fixed jaw; -X from the moving jaw.
+    normals = {}
     for contact_id in range(data.ncon):
         contact = data.contact[contact_id]
         geom1 = int(contact.geom1)
         geom2 = int(contact.geom2)
         if cube_geom_id not in {geom1, geom2}:
             continue
+        if contact.dist > 0 or contact.efc_address < 0:
+            continue
+        force = np.zeros(6)
+        mujoco.mj_contactForce(model, data, contact_id, force)
+        if force[0] <= 1e-4:
+            continue
         other_geom = geom2 if geom1 == cube_geom_id else geom1
-        contacted_roles.add(describe_gripper_geom(model, other_geom))
-    return "fixed gripper-side structure" in contacted_roles and "moving jaw" in contacted_roles
+        role = describe_gripper_geom(model, other_geom)
+        if role not in {"fixed gripper-side structure", "moving jaw"}:
+            continue
+        inward = data.xmat[model.geom_bodyid[other_geom]].reshape(3, 3)[:, 0].copy()
+        if role == "moving jaw":
+            inward *= -1
+        normal = contact.frame[:3].copy()
+        if geom1 == cube_geom_id:
+            normal *= -1
+        if np.dot(normal, inward) < 0.8 or contact.dist < -0.001:
+            continue
+        contacted_roles.add(role)
+        normals[role] = normal
+    return (
+        "fixed gripper-side structure" in contacted_roles
+        and "moving jaw" in contacted_roles
+        and np.dot(normals["fixed gripper-side structure"], normals["moving jaw"]) < -0.8
+    )
 
 
 def get_mesh_vertices_world(
@@ -514,13 +562,13 @@ def get_validated_auto_targets(
     total_pose_correction = np.zeros(3)
     for _ in range(8):
         alignment = get_jaw_alignment(model, grasp_target, cube_pos, cube_pos[2])
-        axis_error = float(alignment["axis_error"])
-        midpoint = np.asarray(alignment["midpoint"])
-        vertical_error = float(cube_pos[2] - midpoint[2])
-        if (
-            abs(axis_error) <= JAW_ALIGNMENT_TOLERANCE
-            and abs(vertical_error) <= JAW_ALIGNMENT_TOLERANCE
-        ):
+        axis = np.asarray(alignment["closing_axis"])
+        fixed_surface = np.asarray(alignment["fixed_surface"])
+        half_width = float(np.sum(np.abs(axis) * cube_size))
+        desired_fixed = cube_pos - axis * (half_width + 0.001)
+        axis_error = float((desired_fixed - fixed_surface) @ axis)
+        vertical_error = float(cube_pos[2] - fixed_surface[2])
+        if abs(axis_error) <= 0.001 and abs(vertical_error) <= 0.001:
             break
         pose_correction = axis_error * np.asarray(alignment["closing_axis"])
         pose_correction[2] = vertical_error
@@ -544,7 +592,7 @@ def get_validated_auto_targets(
     cube_width_along_axis = float(
         2.0 * np.sum(np.abs(np.asarray(grasp_alignment["closing_axis"])) * cube_size)
     )
-    print(f"\nApplied jaw-midpoint correction: {np.round(total_pose_correction, 4)}")
+    print(f"\nApplied fixed-jaw correction: {np.round(total_pose_correction, 4)}")
     print_jaw_alignment("GRASP_DEPTH planned", grasp_alignment)
     print_gripper_aperture_table(model, grasp_target, cube_pos, cube_width_along_axis)
     open_gap = get_jaw_surface_gap(grasp_alignment)
@@ -711,7 +759,8 @@ def main() -> None:
     gripper_open = True
     auto_running = True
     auto_phase_index = 0
-    auto_phase_start_time = time.time()
+    auto_phase_start_time = data.time
+    grasp_contact_tracker = GraspContactTracker()
     auto_phase_start_ctrl = data.ctrl.copy()
     auto_phase_target_ctrl = auto_targets[AUTO_SEQUENCE[auto_phase_index]].copy()
     auto_phase_next_log_time = auto_phase_start_time
@@ -739,7 +788,11 @@ def main() -> None:
 
     def print_lift_result() -> None:
         """Print final grasp/lift result."""
-        lift_success = max_cube_z - initial_cube_z >= LIFT_Z_OFFSET
+        lift_success = float(
+            data.body("target").xpos[2]
+        ) - initial_cube_z >= LIFT_Z_OFFSET - 0.005 and cube_contacts_fixed_and_moving_jaw(
+            model, data, cube_geom_id
+        )
         cube_final_pos = data.body("target").xpos.copy()
         grasp_error = phase_eef_positions.get("GRASP_DEPTH", np.full(3, np.nan)) - cube_initial_pos
         final_fingertip_z = [float(data.geom_xpos[geom_id][2]) for geom_id in finger_geom_ids]
@@ -768,6 +821,7 @@ def main() -> None:
         auto_phase_next_log_time = now
         auto_phase_start_ctrl = data.ctrl.copy()
         auto_phase_target_ctrl = auto_targets[pose_name].copy()
+        grasp_contact_tracker.since = None
         print(f"[AUTO] Phase {auto_phase_index + 1}/{len(AUTO_SEQUENCE)}: {pose_name}")
         if pose_name == "GRASP_DEPTH":
             print("[AUTO] Pausing before CLOSE_GRIPPER for visual jaw/cube alignment check.")
@@ -859,24 +913,33 @@ def main() -> None:
     try:
         with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
             viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTPOINT] = True
-            viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = True
-            viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONVEXHULL] = True
-            viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_TRANSPARENT] = True
+            viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = False
+            viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONVEXHULL] = False
+            viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_TRANSPARENT] = False
             viewer.opt.geomgroup[2] = True
-            viewer.opt.geomgroup[3] = True
+            viewer.opt.geomgroup[3] = False
 
             while viewer.is_running():
                 step_start = time.time()
-                now = time.time()
+                now = data.time
 
                 if data.time < previous_sim_time:
                     restart_auto_sequence(now)
 
                 if auto_running:
                     pose_name = AUTO_SEQUENCE[auto_phase_index]
+                    if pose_name == "LIFT" and not cube_contacts_fixed_and_moving_jaw(
+                        model, data, cube_geom_id
+                    ):
+                        auto_running = False
+                        print("[AUTO] Lift stopped: cube contact was lost.")
+                        print_lift_result()
+                        continue
                     max_cube_z = max(max_cube_z, float(data.body("target").xpos[2]))
                     if pose_name == "GRASP_DEPTH":
                         duration = AUTO_VERIFY_HOLD_SECONDS
+                    elif pose_name == "CLOSE_GRIPPER":
+                        duration = GRIPPER_CLOSE_SECONDS
                     elif np.allclose(auto_phase_start_ctrl, auto_phase_target_ctrl):
                         duration = AUTO_HOLD_SECONDS
                     else:
@@ -904,6 +967,22 @@ def main() -> None:
                         auto_phase_next_log_time = now + 0.3
 
                     if t >= 1.0:
+                        if pose_name == "CLOSE_GRIPPER":
+                            confirmed = grasp_contact_tracker.update(
+                                now, cube_contacts_fixed_and_moving_jaw(model, data, cube_geom_id)
+                            )
+                            if not confirmed:
+                                if now - auto_phase_start_time >= duration + GRASP_SETTLE_SECONDS:
+                                    auto_running = False
+                                    print(
+                                        "[AUTO] Lift blocked: opposing pad contact did not settle."
+                                    )
+                                    print_close_lift_log("GRASP FAILED")
+                                mujoco.mj_step(model, data)
+                                viewer.sync()
+                                previous_sim_time = data.time
+                                time.sleep(max(0, model.opt.timestep - (time.time() - step_start)))
+                                continue
                         data.ctrl[:] = auto_phase_target_ctrl
                         print(f"[AUTO] Reached {pose_name}")
                         if pose_name in {"CLOSE_GRIPPER", "LIFT"}:
@@ -930,7 +1009,7 @@ def main() -> None:
                 mujoco.mj_step(model, data)
                 viewer.sync()
                 if data.time < previous_sim_time:
-                    restart_auto_sequence(time.time())
+                    restart_auto_sequence(data.time)
                 previous_sim_time = data.time
 
                 time_until_next_step = model.opt.timestep - (time.time() - step_start)

@@ -137,3 +137,19 @@ This script verifies smooth cosine joint trajectory generation between preset po
 
 ---
 Made in 🇨🇴 Colombia with Love ❤️
+# Grasp collision checks
+
+The gripper has one fixed finger and one hinged finger. Its collision meshes are
+separate convex sections clipped from the original CAD meshes, with named distal
+pad sections. Only compressive contacts on the inward-facing pad surfaces count
+as a grasp; palm, shell, fingertip-bottom, and one-sided contacts do not.
+
+The automatic sequence aligns the cube beside the fixed finger, closes for three
+seconds, and allows up to two additional seconds to settle. Lifting requires
+0.2 seconds of uninterrupted opposing pad contact and stops if contact is lost.
+
+Run `python check_grasp.py` to check penetration, sustained contact, lift height,
+one-second retention, and rejection of one-sided contact. Add `--render` to save
+`grasp_verified.png` (requires Pillow and a working OpenGL renderer).
+Run `python fit_jaw_collisions.py` to regenerate the fitted collision assets from
+the original STL files. The visual CAD meshes remain unchanged.
