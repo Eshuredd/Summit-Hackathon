@@ -137,7 +137,33 @@ This script verifies smooth cosine joint trajectory generation between preset po
 
 ---
 Made in 🇨🇴 Colombia with Love ❤️
-# Grasp collision checks
+## Deterministic single-arm pick and place
+
+The complete cycle uses the existing contact-based grasp, transfers above the green
+non-colliding marker, lowers over four seconds, releases near the table, retreats
+upward, and returns HOME. The desired final cube center is `[0.18, 0.08, 0.015]`
+meters. Grasp meshes and actuator settings are unchanged.
+
+From this directory on Windows:
+
+```powershell
+.\.venv\Scripts\python.exe pick_place.py
+.\.venv\Scripts\python.exe pick_place.py --headless --runs 10
+```
+
+Both modes use the same controller. Press R in the viewer to reset/restart, 1–4
+for manual poses, or Space to toggle the jaw. Manual commands stop the sequence.
+The original `simulate.py` grasp-only viewer remains available.
+
+Headless mode writes `pick_place_results.json` and exits nonzero if any reset fails.
+These are identical deterministic resets, not randomized robustness trials.
+Success requires XY error below 3 cm, cube-center Z within 5 mm of the destination,
+floor contact, and low final cube velocity. Release requires XY error below 2.5 cm,
+cube-bottom height within 6 mm above the table, and linear speed below 2 cm/s.
+Lateral transfer requires opposing pad contact and at least 2.5 cm of bottom
+clearance. No attachments or welds are used.
+
+## Grasp collision checks
 
 The gripper has one fixed finger and one hinged finger. Its collision meshes are
 separate convex sections clipped from the original CAD meshes, with named distal
