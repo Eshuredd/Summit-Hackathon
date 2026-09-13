@@ -1,10 +1,10 @@
 {
   "arm": "left",
-  "successes": 0,
+  "successes": 1,
   "runs": 1,
   "results": [
     {
-      "success": false,
+      "success": true,
       "initial": [
         0.18,
         0.0,
@@ -16,15 +16,23 @@
         0.015
       ],
       "final": [
-        0.18398611856853922,
-        0.04880567605501064,
-        0.06731362307865389
+        0.18108742193449265,
+        0.07997379607885494,
+        0.014970907574062234
       ],
-      "xy_distance": 0.03144797271092987,
-      "final_z": 0.06731362307865389,
-      "failure": "Viewer closed before completion",
+      "xy_distance": 0.0010877376104093876,
+      "final_z": 0.014970907574062234,
+      "failure": null,
       "arm": "left",
-      "max_inactive_home_error": 0.0005397877333856312
+      "max_inactive_home_error": 0.0005397877333856312,
+      "runtime": {
+        "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+        "versions": {
+          "mujoco": "3.10.0",
+          "numpy": "2.5.1",
+          "scipy": "1.18.0"
+        }
+      }
     }
   ]
 }
