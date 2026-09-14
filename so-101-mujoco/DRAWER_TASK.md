@@ -73,7 +73,7 @@ after both arms retreat, so it includes that displacement.
 Run the structural and negative guard checks with:
 
 ```powershell
-.\.venv\Scripts\python.exe test_drawer_guards.py
+.\.venv\Scripts\python.exe -m pytest -q tests/test_drawer_guards.py
 ```
 
 These verify unchanged robot geometry, a passive drawer with no welds, and

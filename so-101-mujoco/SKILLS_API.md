@@ -41,7 +41,7 @@ if it has not already happened. Both drawer call styles produce the same motion.
   contact checks, and collision preflight are preserved.
 - `bimanual_drawer_task.py`: CLI arguments, high-level skill ordering, and JSON
   reporting. It contains no MuJoCo controls, IK, or grasp implementation.
-- `test_skills.py`: observation, result, ordering, and failure-isolation tests.
+- `tests/test_skills.py`: observation, result, ordering, and failure-isolation tests.
 - `validate_skills.py`: physical execution comparisons against the original
   handoff controller and the saved drawer baseline.
 - `tests/fixtures/drawer_baseline.json`: the successful pre-refactor drawer trial,
@@ -134,7 +134,7 @@ excursions remain visible.
 ## Headless validation
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q test_skills.py test_drawer_guards.py test_handoff_guards.py test_dual_scene.py
+.\.venv\Scripts\python.exe -m pytest -q tests
 .\.venv\Scripts\python.exe bimanual_drawer_task.py --runs 10
 .\.venv\Scripts\python.exe validate_skills.py --drawer-report drawer_results.json --runs 10
 .\.venv\Scripts\python.exe validate_skills.py --runs 10

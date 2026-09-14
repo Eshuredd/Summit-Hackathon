@@ -91,7 +91,7 @@ uv run python simulate.py
 Run the batched benchmark:
 
 ```bash
-uv run python test_warp.py
+uv run python tests/test_warp.py
 ```
 
 Example usage in Python for Reinforcement Learning:
@@ -130,7 +130,7 @@ The SO-101 model (`assets/so101.xml`) defines 6 articulated degrees of freedom m
 Run programmatic pose interpolation tests:
 
 ```bash
-uv run python test_poses.py
+uv run python tests/test_poses.py
 ```
 
 This script verifies smooth cosine joint trajectory generation between preset poses (`HOME`, `REACH`, `PICK`, `STOW`).

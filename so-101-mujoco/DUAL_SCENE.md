@@ -51,7 +51,7 @@ prints the selected arm, cube initial/final positions, target, XY error, and out
 The actuator list is verified and printed on startup, left first then right, each
 in shoulder-pan, shoulder-lift, elbow-flex, wrist-flex, wrist-roll, gripper order.
 
-Run `python test_dual_scene.py` to check model structure, jaw properties, prefixes,
+Run `python -m pytest -q tests/test_dual_scene.py` to check model structure, jaw properties, prefixes,
 and isolated control mapping. Run `python build_dual_scene.py` to regenerate the
 dual XML after deliberately changing the single-arm source model.
 

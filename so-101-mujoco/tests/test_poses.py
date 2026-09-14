@@ -15,7 +15,7 @@ def test_preset_sequence() -> None:
     Raises:
         AssertionError: If the maximum joint position tracking error exceeds tolerance.
     """
-    scene_path = Path(__file__).parent / "assets" / "scene.xml"
+    scene_path = Path(__file__).resolve().parents[1] / "assets" / "scene.xml"
     model = mujoco.MjModel.from_xml_path(str(scene_path))
     data = mujoco.MjData(model)
     robot = SO101Robot(model=model, data=data)

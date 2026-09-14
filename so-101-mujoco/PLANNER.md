@@ -72,7 +72,7 @@ An OBSERVE and ACT log accompanies each manipulation decision in the full trace.
 ## Tests and baseline comparison
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q test_planner.py test_skills.py test_drawer_guards.py test_handoff_guards.py test_dual_scene.py
+.\.venv\Scripts\python.exe -m pytest -q tests
 .\.venv\Scripts\python.exe validate_skills.py --drawer-report planner_drawer_results.json --runs 10
 ```
 
