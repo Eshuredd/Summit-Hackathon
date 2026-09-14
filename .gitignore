@@ -42,3 +42,4 @@ checkpoints/
 # Generated benchmark results
 dual_*_results.json
 pick_place_results.json
+*.json
