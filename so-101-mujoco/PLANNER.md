@@ -84,3 +84,11 @@ observations to prove replanning, plus failure and nonprogress cases.
 The planner, runner, and tests are additions. The existing Skills API,
 controllers, scene, grasp implementation, and deterministic scripted runner
 remain unchanged.
+
+
+## Optional interactive run
+
+`planner_drawer_task.py --viewer` uses one interactive session. Closing its window
+terminates execution normally; it does not produce a planner FAILURE or start a
+new trial. The runner closes its Skills resources in `finally`. Without
+`--viewer`, execution remains headless and uses the requested trial count.

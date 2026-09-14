@@ -171,6 +171,7 @@ def main():
             viewer.cam.distance = 0.8
             viewer.cam.azimuth = 90
             viewer.cam.elevation = -55
+        terminated = False
         try:
             while viewer is None or viewer.is_running():
                 start = time.perf_counter()
@@ -191,31 +192,47 @@ def main():
                     viewer.sync()
                     time.sleep(max(0, model.opt.timestep - (time.perf_counter() - start)))
             else:
-                controller.failure = "Viewer closed before completion"
+                terminated = True
+                print("[VIEWER] Closed by user; exiting without another trial.")
         except (RuntimeError, ValueError, AssertionError) as error:
             controller.failure = str(error)
         finally:
-            result = controller.validate()
+            result = (
+                dict(
+                    success=False,
+                    failure=None,
+                    terminated=True,
+                    termination_reason="viewer_closed",
+                    initial=controller.initial.tolist(),
+                    final=data.body("target").xpos.tolist(),
+                    target=destination.tolist(),
+                )
+                if terminated
+                else controller.validate()
+            )
             result.update(arm=args.arm, max_inactive_home_error=max_idle_error, runtime=runtime)
             results.append(result)
             print(f"Inactive HOME max joint error: {max_idle_error:.6f} rad")
             if viewer:
                 # Keep the completed result visible until the user closes the window.
-                while viewer.is_running():
+                while controller.failure is None and not terminated and viewer.is_running():
                     start = time.perf_counter()
                     mujoco.mj_step(model, data)
                     viewer.sync()
                     time.sleep(max(0, model.opt.timestep - (time.perf_counter() - start)))
                 viewer.close()
     successes = sum(r["success"] for r in results)
-    print(f"{args.arm}: {successes}/{len(results)} SUCCESS")
+    if any(r.get("terminated") for r in results):
+        print("Dual pick/place terminated by user; no manipulation failure.")
+    else:
+        print(f"{args.arm}: {successes}/{len(results)} SUCCESS")
     report = Path(__file__).parent / f"dual_{args.arm}_results.json"
     report.write_text(
         json.dumps(
             dict(arm=args.arm, successes=successes, runs=len(results), results=results), indent=2
         )
     )
-    if successes != len(results):
+    if any(not r["success"] and not r.get("terminated") for r in results):
         raise SystemExit(1)
 
 

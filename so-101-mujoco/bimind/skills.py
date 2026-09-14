@@ -7,6 +7,7 @@ import numpy as np
 
 import simulate as grasp
 from dual_pick_place import check_runtime, verify_layout
+from viewer_lifecycle import ViewerClosed, check_viewer
 
 from .controllers import DrawerController, ObjectController
 
@@ -32,6 +33,7 @@ class Skills:
         self._stage = "new"
         self._owner = None
         self._failure = None
+        self._terminated = False
         self.results = []
         self.object_name = "drawer_object" if scene == "drawer" else "object"
 
@@ -114,21 +116,28 @@ class Skills:
         try:
             if self._failure is not None:
                 raise RuntimeError("Execution stopped after failure; create a new Skills session")
+            if self._terminated:
+                raise ViewerClosed("Viewer closed by user")
+            check_viewer(self._controller.viewer)
             if arm is not None and arm not in ("left", "right"):
                 raise ValueError(f"Unknown arm: {arm}")
             action()
+        except ViewerClosed:
+            self._terminated = True
         except (RuntimeError, ValueError, AssertionError) as error:
             reason = str(error)
             if self._failure is None:
                 self._failure = dict(skill=skill, phase=self._controller.phase, reason=reason)
         result = dict(
-            success=reason is None,
+            success=reason is None and not self._terminated,
             skill=skill,
             arm=arm,
             reason=reason,
             phase=self._controller.phase,
             state=self.get_scene_state(),
         )
+        if self._terminated:
+            result.update(terminated=True, termination_reason="viewer_closed")
         self.results.append(result)
         return result
 
@@ -428,7 +437,7 @@ class Skills:
             JSON-compatible trial report; incomplete execution is never successful.
         """
         failure = self._failure["reason"] if self._failure else None
-        if self._stage != "complete" and failure is None:
+        if self._stage != "complete" and failure is None and not self._terminated:
             failure = "Task sequence has not completed"
         c = self._controller
         report = (
@@ -450,6 +459,10 @@ class Skills:
                 diagnostics=c.history,
             )
         )
+        if self._terminated and failure is None:
+            report.update(
+                success=False, failure=None, terminated=True, termination_reason="viewer_closed"
+            )
         return dict(report, runtime=self.runtime, skills=self.results, state=self.get_scene_state())
 
     def close(self):

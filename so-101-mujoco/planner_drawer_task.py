@@ -39,6 +39,9 @@ def run_task(skills: Skills, max_steps: int = 16) -> dict[str, Any]:
     trace = []
     stop_reason = None
     reset = skills.reset()
+    if reset.get("terminated"):
+        print("[VIEWER] Closed by user; exiting without another trial.", flush=True)
+        return dict(skills.get_run_report(), planner_trace=trace, planner_stop_reason=None)
     if not reset["success"]:
         stop_reason = reset["reason"]
     else:
@@ -60,6 +63,9 @@ def run_task(skills: Skills, max_steps: int = 16) -> dict[str, Any]:
             print(f"[ACT] {invocation}", flush=True)
             result = getattr(skills, name)(*args)
             entry["result"] = result
+            if result.get("terminated"):
+                print("[VIEWER] Closed by user; exiting without another trial.", flush=True)
+                break
             if not result["success"]:
                 # Observe once more and record the planner's terminal failure decision.
                 state = skills.get_scene_state()
@@ -84,28 +90,33 @@ def main():
     """Run deterministic headless planner trials and save an independent report."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs", type=int, default=10)
+    parser.add_argument("--viewer", action="store_true")
     parser.add_argument("--max-steps", type=int, default=16)
     args = parser.parse_args()
     if args.runs < 1 or args.max_steps < 1:
         parser.error("--runs and --max-steps must be positive")
     results = []
-    for run in range(args.runs):
-        skills = Skills(scene="drawer")
+    trial_count = 1 if args.viewer else args.runs
+    for run in range(trial_count):
+        skills = Skills(scene="drawer", viewer=args.viewer)
         try:
             report = dict(run=run + 1, **run_task(skills, args.max_steps))
             results.append(report)
         finally:
             skills.close()
         print(
-            f"Planner trial {run + 1}/{args.runs}: success={report['success']}, "
+            f"Planner trial {run + 1}/{trial_count}: success={report['success']}, "
             f"failure={report['failure']}",
             flush=True,
         )
     path = Path(__file__).parent / "planner_drawer_results.json"
     path.write_text(json.dumps(results, indent=2))
     successes = sum(r["success"] for r in results)
-    print(f"Planner drawer success: {successes}/{args.runs}", flush=True)
-    if successes != args.runs:
+    if any(r.get("terminated") for r in results):
+        print("Planner run terminated by user; no manipulation failure.", flush=True)
+    else:
+        print(f"Planner drawer success: {successes}/{len(results)}", flush=True)
+    if any(not r["success"] and not r.get("terminated") for r in results):
         raise SystemExit(1)
 
 

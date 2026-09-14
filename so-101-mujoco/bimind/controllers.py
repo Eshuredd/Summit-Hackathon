@@ -13,6 +13,7 @@ from scipy.spatial.transform import Rotation
 import simulate as grasp
 from bimanual_handoff import Handoff
 from dual_pick_place import ASSETS, ArmBackend
+from viewer_lifecycle import check_viewer
 
 
 class DrawerController(Handoff):
@@ -77,6 +78,7 @@ class DrawerController(Handoff):
 
     def tick(self, required=()):
         """Step physics, checking collisions, grasp support, and drawer clearance."""
+        check_viewer(self.viewer)
         mujoco.mj_step(self.model, self.data)
         self.max_open = max(self.max_open, self.opening())
         self.max_z = max(self.max_z, self.position()[2])
@@ -98,8 +100,6 @@ class DrawerController(Handoff):
             self.max_drop = max(self.max_drop, self.transport_peak - self.position()[2])
             if self.max_drop > 0.01:
                 raise RuntimeError("Object dropped more than 10 mm during transport")
-        if self.viewer and not self.viewer.is_running():
-            raise RuntimeError("Viewer closed before task completion")
         self.sync_viewer()
 
     def mark(self, phase):

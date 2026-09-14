@@ -28,6 +28,9 @@ def run_task(skills: Skills) -> dict:
     )
     for skill, args in calls:
         result = skill(*args)
+        if result.get("terminated"):
+            print("[VIEWER] Closed by user; exiting without another trial.", flush=True)
+            break
         if not result["success"]:
             print(f"[DRAWER] FAILURE in {result['phase']}: {result['reason']}", flush=True)
             break
@@ -43,7 +46,8 @@ def main():
     if args.runs < 1:
         parser.error("--runs must be positive")
     results = []
-    for run in range(args.runs):
+    trial_count = 1 if args.viewer else args.runs
+    for run in range(trial_count):
         skills = Skills(scene="drawer", viewer=args.viewer)
         try:
             results.append(dict(run=run + 1, **run_task(skills)))
@@ -55,8 +59,11 @@ def main():
     )
     path.write_text(json.dumps(results, indent=2))
     successes = sum(r["success"] for r in results)
-    print(f"Drawer success: {successes}/{args.runs}", flush=True)
-    if successes != args.runs:
+    if any(r.get("terminated") for r in results):
+        print("Drawer run terminated by user; no manipulation failure.", flush=True)
+    else:
+        print(f"Drawer success: {successes}/{len(results)}", flush=True)
+    if any(not r["success"] and not r.get("terminated") for r in results):
         raise SystemExit(1)
 
 

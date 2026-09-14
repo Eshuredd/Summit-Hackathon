@@ -96,7 +96,7 @@ Every manipulation skill returns a JSON-compatible dictionary:
 ```
 
 Handoff results additionally include `from_arm` and `to_arm`. A failure retains
-the precise controller phase and live object/robot state. The first failure
+the precise controller phase and live object/robot state. The first physical or planning failure
 stops the session: further skill calls return failures without motion. There is
 no rollback, automatic regrasp, or reset of live object positions. Create a new
 session to recover. Scene construction/runtime configuration errors raise before
@@ -144,3 +144,15 @@ The physical API validation runs the original handoff once, compares ten API
 handoffs against it, tests each arm's independent pick/place, and checks the
 implicit-lift drawer sequence against its baseline. It writes
 `skill_regression_results.json` without overwriting `handoff_results.json`.
+
+
+## Viewer termination
+
+Viewer close is separate from task failure. A skill interrupted by the window X
+returns `success: false`, `reason: null`, `terminated: true`, and
+`termination_reason: "viewer_closed"`. The session report also has
+`failure: null`; the physical failure latch is untouched. Further calls perform
+no motion. Runners exit normally and close resources without another trial.
+Genuine grasp, collision, drop, and planning failures retain their failure reason
+and nonzero runner exit status, even if the window also closes. Interactive
+runners execute one trial; headless `--runs` behavior is unchanged.

@@ -8,8 +8,9 @@ Run from `so-101-mujoco` using the validated project environment:
 
 The script checks the existing lockfile versions, including MuJoCo 3.10.0.
 Headless execution is the default. `--viewer` remains optional and closes when
-its trial finishes; closing it early records a failure. The requested final
-validation uses headless execution only.
+its trial finishes. Closing it early records user termination, not manipulation
+failure, and exits without starting another trial. Interactive runs use one trial
+even when `--runs` is larger. Headless batch execution is unchanged.
 
 The task now calls the instance-based API in `bimind/skills.py`; the original
 physical controller lives in `bimind/controllers.py`. See [SKILLS_API.md](SKILLS_API.md)

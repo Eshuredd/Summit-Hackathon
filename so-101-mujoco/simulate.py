@@ -983,6 +983,8 @@ def main() -> None:
                                     print_close_lift_log("GRASP FAILED")
                                 mujoco.mj_step(model, data)
                                 viewer.sync()
+                                if not viewer.is_running():
+                                    break
                                 previous_sim_time = data.time
                                 time.sleep(max(0, model.opt.timestep - (time.time() - step_start)))
                                 continue
@@ -1011,6 +1013,8 @@ def main() -> None:
 
                 mujoco.mj_step(model, data)
                 viewer.sync()
+                if not viewer.is_running():
+                    break
                 if data.time < previous_sim_time:
                     restart_auto_sequence(data.time)
                 previous_sim_time = data.time

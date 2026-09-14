@@ -14,6 +14,7 @@ from scipy.spatial.transform import Rotation
 
 import simulate as grasp
 from dual_pick_place import ASSETS, ArmBackend, check_runtime, verify_layout
+from viewer_lifecycle import ViewerClosed, check_viewer
 
 
 class Handoff:
@@ -92,12 +93,15 @@ class Handoff:
         """Refresh the MuJoCo viewer at the physics timestep rate when enabled."""
         if self.viewer is None:
             return
+        check_viewer(self.viewer)
         start = time.perf_counter()
         self.viewer.sync()
+        check_viewer(self.viewer)
         time.sleep(max(0, self.model.opt.timestep - (time.perf_counter() - start)))
 
     def tick(self, required=()):
         """Advance physics and enforce real contact safety at every timestep."""
+        check_viewer(self.viewer)
         mujoco.mj_step(self.model, self.data)
         contacts = self.arm_contacts()
         if contacts:
@@ -122,6 +126,7 @@ class Handoff:
 
     def move(self, arm, target, duration=3, required=()):
         """Move only the selected six controls while the other arm holds its command."""
+        check_viewer(self.viewer)
         ids = self.backends[arm].indices
         start = self.data.ctrl[ids].copy()
         target = np.asarray(target)[ids] if len(target) == 12 else np.asarray(target)
@@ -131,6 +136,7 @@ class Handoff:
             self.preflight(arm, target)
         steps = int(duration / self.model.opt.timestep)
         for i in range(steps):
+            check_viewer(self.viewer)
             alpha = 0.5 * (1 - np.cos(np.pi * (i + 1) / steps))
             self.data.ctrl[ids] = start + alpha * (target - start)
             self.tick(required)
@@ -143,6 +149,7 @@ class Handoff:
         scratch.qpos[:] = self.data.qpos
         start = self.data.qpos[addresses].copy() if start is None else start
         for alpha in np.linspace(0, 1, 101):
+            check_viewer(self.viewer)
             scratch.qpos[addresses] = start + alpha * (target - start)
             mujoco.mj_forward(self.model, scratch)
             if self.arm_contacts(scratch):
@@ -372,9 +379,11 @@ class Handoff:
             raise RuntimeError("Missing transfer verification")
         self.mark("SUCCESS")
         if self.viewer:
-            while self.viewer.is_running():
-                self.hold(0.1)
-            self.viewer.close()
+            try:
+                while self.viewer.is_running():
+                    self.hold(0.1)
+            except ViewerClosed:
+                pass  # The task already succeeded; close ends only the display loop.
 
 
 def main():
@@ -394,20 +403,29 @@ def main():
             )
         )
     results = []
-    for run in range(args.runs):
+    trial_count = 1 if args.viewer else args.runs
+    for run in range(trial_count):
         experiment = Handoff(viewer=args.viewer)
-        verify_layout(experiment.model)
+        terminated = False
+        failure = None
         try:
+            verify_layout(experiment.model)
             experiment.run()
             failure = None
+        except ViewerClosed:
+            terminated = True
+            print("[VIEWER] Closed by user; exiting without another trial.")
         except (RuntimeError, ValueError) as error:
             failure = str(error)
             print(f"[HANDOFF] FAILURE in {experiment.phase}: {failure}")
             experiment.diagnostics()
+        finally:
+            if experiment.viewer is not None:
+                experiment.viewer.close()
         results.append(
             dict(
                 run=run + 1,
-                success=failure is None,
+                success=failure is None and not terminated,
                 failure=failure,
                 phase=experiment.phase,
                 max_cube_drop=experiment.max_drop,
@@ -427,12 +445,18 @@ def main():
                 diagnostics=experiment.history,
             )
         )
+        if terminated:
+            results[-1].update(terminated=True, termination_reason="viewer_closed")
+            break
     (ASSETS.parent / "handoff_results.json").write_text(json.dumps(results, indent=2))
     successes = sum(r["success"] for r in results)
-    print(f"Handoff success: {successes}/{args.runs}")
+    if any(r.get("terminated") for r in results):
+        print("Handoff run terminated by user; no manipulation failure.")
+    else:
+        print(f"Handoff success: {successes}/{len(results)}")
     print(f"Maximum transfer drop: {max(r['max_cube_drop'] for r in results):.6f} m")
     print(f"Arm-arm collisions: {sum(r['arm_arm_collisions'] for r in results)}")
-    if successes != args.runs:
+    if any(r["failure"] is not None for r in results):
         raise SystemExit(1)
 
 
