@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
-from bimanual_drawer_task import DrawerTask
+from bimind.controllers import DrawerController as DrawerTask
 from dual_pick_place import ASSETS
 
 

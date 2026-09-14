@@ -48,3 +48,6 @@ env/
 *.hdf5
 logs/
 checkpoints/
+
+# Saved pre-refactor deterministic regression evidence.
+!tests/fixtures/drawer_baseline.json

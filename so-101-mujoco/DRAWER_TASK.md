@@ -11,6 +11,10 @@ Headless execution is the default. `--viewer` remains optional and closes when
 its trial finishes; closing it early records a failure. The requested final
 validation uses headless execution only.
 
+The task now calls the instance-based API in `bimind/skills.py`; the original
+physical controller lives in `bimind/controllers.py`. See [SKILLS_API.md](SKILLS_API.md)
+for skill contracts, scene state, and regression commands.
+
 ## Scene layout
 
 All coordinates are world XYZ in metres. The existing dual SO-101 robot bodies,

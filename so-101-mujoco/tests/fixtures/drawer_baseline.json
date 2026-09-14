@@ -1,0 +1,230 @@
+{
+  "run": 1,
+  "runtime": {
+    "executable": "C:\\Users\\eshum\\Downloads\\bindGIT\\so-101-mujoco\\.venv\\Scripts\\python.exe",
+    "versions": {
+      "mujoco": "3.10.0",
+      "numpy": "2.5.1",
+      "scipy": "1.18.0"
+    }
+  },
+  "success": true,
+  "failure": null,
+  "phase": "SUCCESS",
+  "drawer_initial_position": 0.0,
+  "drawer_max_opening": 0.06025702377726848,
+  "drawer_final_position": 0.05993880257429281,
+  "handle_contact_count": 3,
+  "maintains_open": true,
+  "minimum_retrieval_opening": 0.06000000000134553,
+  "object_contact_count": 6,
+  "object_lift_height": 0.050539941558235255,
+  "object_final_position": [
+    0.21468263665250636,
+    0.0711228499160033,
+    0.014970907574062206
+  ],
+  "object_final_xy_error": 0.017157610925863938,
+  "arm_arm_collisions": 0,
+  "object_drop_distance": 0.0002785129918911472,
+  "grasped_inside_drawer": true,
+  "lifted_clear": true,
+  "diagnostics": [
+    {
+      "phase": "RESET",
+      "drawer": 0.0,
+      "object": [
+        0.22,
+        -0.11,
+        0.031
+      ],
+      "handle_contacts": 0,
+      "object_contacts": 0,
+      "left_support": false,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "LEFT_APPROACH_HANDLE",
+      "drawer": 0.0,
+      "object": [
+        0.22,
+        -0.11,
+        0.03099777247018319
+      ],
+      "handle_contacts": 0,
+      "object_contacts": 0,
+      "left_support": false,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "LEFT_GRASP_HANDLE",
+      "drawer": 0.00047974381920010394,
+      "object": [
+        0.22000022241510533,
+        -0.10952073477627056,
+        0.030997772470182126
+      ],
+      "handle_contacts": 1,
+      "object_contacts": 0,
+      "left_support": false,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "LEFT_PULL_OPEN",
+      "drawer": 0.0004951533803003232,
+      "object": [
+        0.22000043199816804,
+        -0.10950524060399038,
+        0.03099777247018318
+      ],
+      "handle_contacts": 2,
+      "object_contacts": 0,
+      "left_support": true,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "LEFT_HOLD_OPEN",
+      "drawer": 0.0601872293595421,
+      "object": [
+        0.22000043199816804,
+        -0.0498130573291502,
+        0.030997772470183208
+      ],
+      "handle_contacts": 2,
+      "object_contacts": 0,
+      "left_support": true,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "RIGHT_APPROACH_OBJECT",
+      "drawer": 0.06014195570411212,
+      "object": [
+        0.22000043199816804,
+        -0.0498583584915914,
+        0.030997772470183208
+      ],
+      "handle_contacts": 2,
+      "object_contacts": 0,
+      "left_support": true,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "RIGHT_GRASP_OBJECT",
+      "drawer": 0.060000025867127445,
+      "object": [
+        0.22000043199816804,
+        -0.05000036810293272,
+        0.030997772470183208
+      ],
+      "handle_contacts": 2,
+      "object_contacts": 0,
+      "left_support": true,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "RIGHT_LIFT_OBJECT",
+      "drawer": 0.06005078326474874,
+      "object": [
+        0.22461133732783983,
+        -0.047188980151092505,
+        0.03099943387351738
+      ],
+      "handle_contacts": 2,
+      "object_contacts": 2,
+      "left_support": true,
+      "right_support": true,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "RIGHT_MOVE_TO_TABLE",
+      "drawer": 0.06000203168746183,
+      "object": [
+        0.22551754858446008,
+        -0.046905733117633096,
+        0.0815382729162381
+      ],
+      "handle_contacts": 2,
+      "object_contacts": 4,
+      "left_support": true,
+      "right_support": true,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "RIGHT_PLACE_OBJECT",
+      "drawer": 0.06000003607355081,
+      "object": [
+        0.2000800383178423,
+        0.08035287739716301,
+        0.08151054438990991
+      ],
+      "handle_contacts": 2,
+      "object_contacts": 4,
+      "left_support": true,
+      "right_support": true,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "RIGHT_RETREAT",
+      "drawer": 0.06000000009762395,
+      "object": [
+        0.20087900320087534,
+        0.08006572066512198,
+        0.014970922677902265
+      ],
+      "handle_contacts": 2,
+      "object_contacts": 2,
+      "left_support": true,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "LEFT_RELEASE_HANDLE",
+      "drawer": 0.06000000000134553,
+      "object": [
+        0.21468263665250636,
+        0.0711228499160033,
+        0.014970907574062206
+      ],
+      "handle_contacts": 2,
+      "object_contacts": 0,
+      "left_support": true,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "LEFT_RETREAT",
+      "drawer": 0.0599913308631274,
+      "object": [
+        0.21468263665250636,
+        0.0711228499160033,
+        0.014970907574062206
+      ],
+      "handle_contacts": 1,
+      "object_contacts": 0,
+      "left_support": false,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    },
+    {
+      "phase": "SUCCESS",
+      "drawer": 0.05993880257429281,
+      "object": [
+        0.21468263665250636,
+        0.0711228499160033,
+        0.014970907574062206
+      ],
+      "handle_contacts": 0,
+      "object_contacts": 0,
+      "left_support": false,
+      "right_support": false,
+      "arm_arm_contacts": 0
+    }
+  ]
+}
