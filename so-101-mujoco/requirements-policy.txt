@@ -1,0 +1,5 @@
+# Add to the existing validated environment; do not resync or replace physics dependencies.
+torch==2.14.0
+onnx==1.22.0
+onnxscript==0.7.2
+openvino==2026.3.1

@@ -13,7 +13,9 @@ def state():
     """Return a closed-drawer observation independent of workflow history."""
     return {
         "failure": None,
-        "drawer": {"is_closed": True, "is_open": False, "hold_monitor_active": False},
+        "instruction": {"task": "drawer_to_table"},
+        "holding": {"drawer_monitor_active": False, "placement_confirmed": False},
+        "drawer": {"visual_state": "closed", "confidence": 0.9},
         "arms": {"left": {"holding_objects": []}, "right": {"holding_objects": []}},
         "objects": {"drawer_object": {"position": [0.22, -0.11, 0.031]}},
         "targets": {"table_target": {"position": [0.2, 0.08, 0.015]}},
@@ -22,12 +24,14 @@ def state():
 
 def open_drawer(state, held=False):
     """Prepare an open drawer with optional measured left support."""
-    state["drawer"].update(is_closed=False, is_open=True, hold_monitor_active=held)
+    state["drawer"]["visual_state"] = "open"
+    state["holding"]["drawer_monitor_active"] = held
     state["arms"]["left"]["holding_objects"] = ["drawer_handle"] if held else []
 
 
 def at_target(state):
     """Place the synthetic cube at the actual target coordinates."""
+    state["holding"]["placement_confirmed"] = True
     state["objects"]["drawer_object"]["position"] = list(
         state["targets"]["table_target"]["position"]
     )
@@ -46,7 +50,7 @@ def test_closed_drawer(state):
 def test_open_drawer_without_maintained_hold(state, contact, monitor):
     """Both actual handle support and the active monitor are required before picking."""
     open_drawer(state)
-    state["drawer"]["hold_monitor_active"] = monitor
+    state["holding"]["drawer_monitor_active"] = monitor
     state["arms"]["left"]["holding_objects"] = ["drawer_handle"] if contact else []
     assert next_action(state)["skill"] == "hold_drawer"
 
@@ -134,18 +138,18 @@ def test_planner_is_stateless_and_does_not_mutate(state):
 
 
 @pytest.mark.parametrize("position", [[float("nan"), 0, 0], [0, float("inf"), 0], [1, 2]])
-def test_invalid_coordinates_stop(state, position):
-    """Invalid sensor values cannot authorize motion."""
+def test_privileged_coordinates_are_ignored(state, position):
+    """Privileged coordinates are no longer planner features."""
     state["objects"]["drawer_object"]["position"] = position
-    assert next_action(state)["skill"] == "STOP"
+    assert next_action(state)["skill"] == "open_drawer"
 
 
 def test_partial_drawer_and_collision_stop(state):
     """Do not invent unvalidated recovery paths or move after a reported collision."""
-    state["drawer"]["is_closed"] = False
+    state["drawer"]["visual_state"] = "partial"
     assert next_action(state)["skill"] == "STOP"
-    state["drawer"]["is_open"] = True
-    state["arm_arm_collisions"] = {"active": True, "total_count": 1}
+    state["drawer"]["visual_state"] = "open"
+    state["failure"] = "arm-arm collision reported"
     assert next_action(state)["skill"] == "STOP"
 
 
@@ -200,7 +204,7 @@ def test_runner_reobserves_and_replans(state):
     report = run_task(skills)
     assert report["success"]
     assert skills.calls == [("open_drawer", "left"), ("finish",)]
-    assert skills.observations == 3
+    assert skills.observations == 2
     assert [row["action"]["skill"] for row in report["planner_trace"]] == ["open_drawer", "finish"]
 
 
@@ -218,3 +222,12 @@ def test_runner_stops_after_skill_failure(state):
     result = run_task(skills)
     assert not result["success"] and len(skills.calls) == 1
     assert result["planner_trace"][-1]["action"]["skill"] == "STOP"
+
+
+@pytest.fixture(autouse=True)
+def fake_camera(monkeypatch):
+    """Supply explicit synthetic camera observations for runner unit tests."""
+    monkeypatch.setattr(
+        "planner_drawer_task.observe",
+        lambda skills, instruction, placed: (None, skills.get_scene_state()),
+    )

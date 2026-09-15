@@ -53,11 +53,12 @@ def object_at_target(state: dict[str, Any]) -> bool:
     )
 
 
-def next_action(state: dict[str, Any]) -> Action:
+def next_action(state: dict[str, Any], confidence_threshold: float = 0.65) -> Action:
     """Choose exactly one next skill from observations, without motion or history.
 
     Args:
-        state: Fresh result of Skills.get_scene_state() after initialization or an action.
+        state: Allowlisted RGB and robot observation, including acknowledged placement.
+        confidence_threshold: Minimum visual confidence required before any action.
 
     Returns:
         A dictionary with skill, positional args, and a human-readable reason.
@@ -67,20 +68,27 @@ def next_action(state: dict[str, Any]) -> Action:
         return _action("STOP", [], "invalid scene observation: expected a dictionary")
     if state.get("failure") is not None:
         return _action("STOP", [], f"active failure: {state['failure']}")
-    collisions = state.get("arm_arm_collisions", {})
-    if isinstance(collisions, dict) and (
-        collisions.get("active") or collisions.get("total_count", 0)
-    ):
-        return _action("STOP", [], "arm-arm collision reported")
     try:
+        if state["instruction"] != {"task": "drawer_to_table"}:
+            raise ValueError("unsupported instruction goal")
         drawer = state["drawer"]
-        closed, opened, monitor = (
-            drawer["is_closed"],
-            drawer["is_open"],
-            drawer["hold_monitor_active"],
-        )
-        if not all(isinstance(value, bool) for value in (closed, opened, monitor)):
-            raise ValueError("drawer flags must be booleans")
+        visual = drawer["visual_state"]
+        confidence = drawer["confidence"]
+        if (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not isfinite(confidence)
+            or not 0 <= confidence <= 1
+            or not 0 <= confidence_threshold <= 1
+        ):
+            raise ValueError("invalid confidence or threshold")
+        if visual not in ("closed", "open") or confidence < confidence_threshold:
+            return _action("STOP", [], "drawer partial, unknown, or below confidence threshold")
+        closed, opened = visual == "closed", visual == "open"
+        monitor = state["holding"]["drawer_monitor_active"]
+        at_target = state["holding"]["placement_confirmed"]
+        if not isinstance(monitor, bool) or not isinstance(at_target, bool):
+            raise ValueError("holding flags must be booleans")
         left = state["arms"]["left"]["holding_objects"]
         right = state["arms"]["right"]["holding_objects"]
         if not all(
@@ -88,11 +96,8 @@ def next_action(state: dict[str, Any]) -> Action:
             for names in (left, right)
         ):
             raise ValueError("holding_objects must be lists of names")
-        at_target = object_at_target(state)
     except (KeyError, TypeError, ValueError, OverflowError) as error:
         return _action("STOP", [], f"invalid scene observation: {error}")
-    if closed and opened:
-        return _action("STOP", [], "inconsistent drawer observation: both closed and open")
     if any(name != "drawer_handle" for name in left) or any(
         name != "drawer_object" for name in right
     ):

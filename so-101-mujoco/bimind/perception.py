@@ -185,6 +185,7 @@ def _select_housing(
         return None
     drawer_x0, drawer_y0, drawer_x1, drawer_y1, _ = drawer
     candidates: list[tuple[float, tuple[int, int, int, int, int]]] = []
+    fragments = []
     for label in range(1, count + 1):
         rows, columns = np.nonzero(labels == label)
         area = len(columns)
@@ -196,11 +197,25 @@ def _select_housing(
         drawer_width = drawer_x1 - drawer_x0 + 1
         overlap_fraction = horizontal_overlap / drawer_width
         vertically_relevant = y0 < drawer_y0 and y1 >= drawer_y0
+        if vertically_relevant and horizontal_overlap > 0:
+            fragments.append((x0, y0, x1, y1, area))
         if overlap_fraction < 0.45 or not vertically_relevant:
             continue
         score = area * (1.0 + overlap_fraction)
         candidates.append((score, (x0, y0, x1, y1, area)))
-    return max(candidates, default=(0.0, None), key=lambda item: item[0])[1]
+    if candidates:
+        return max(candidates, key=lambda item: item[0])[1]
+    # A gripper can split the housing into separate visible components. Combine
+    # only substantial housing-colored fragments bordering the drawer in this RGB.
+    if len(fragments) >= 2:
+        x0 = min(part[0] for part in fragments)
+        y0 = min(part[1] for part in fragments)
+        x1 = max(part[2] for part in fragments)
+        y1 = max(part[3] for part in fragments)
+        overlap = max(0, min(x1, drawer_x1) - max(x0, drawer_x0) + 1)
+        if overlap / (drawer_x1 - drawer_x0 + 1) >= 0.45:
+            return x0, y0, x1, y1, sum(part[4] for part in fragments)
+    return None
 
 
 def _unknown(reason: str) -> dict[str, Any]:
