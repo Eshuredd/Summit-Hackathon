@@ -33,11 +33,17 @@ def truth_state(position: float) -> str:
     return "partial"
 
 
-def run_evaluation(debug_dir: Path | None = None) -> list[dict[str, Any]]:
+def run_evaluation(
+    debug_dir: Path | None = None,
+    show: bool = False,
+    frame_delay: float = 0.35,
+) -> list[dict[str, Any]]:
     """Run the physical-position sweep under controlled visual variations.
 
     Args:
         debug_dir: Optional directory in which every RGB sample is saved.
+        show: Whether to open an interactive preview of the camera observations.
+        frame_delay: Seconds to display each sample before advancing.
 
     Returns:
         One result dictionary per rendered sample.
@@ -52,6 +58,7 @@ def run_evaluation(debug_dir: Path | None = None) -> list[dict[str, Any]]:
         ("world_y", 1.0, (0.0, 0.0, 0.0), (0.0, -0.01), "original"),
         ("background_gray", 1.0, (0.0, 0.0, 0.0), (0.0, 0.0), "gray"),
     )
+    preview = _CameraPreview(frame_delay) if show else None
     results: list[dict[str, Any]] = []
     for seed, (name, light, camera_delta, world_delta, background) in enumerate(scenarios):
         model = mujoco.MjModel.from_xml_path(str(SCENE))
@@ -83,11 +90,15 @@ def run_evaluation(debug_dir: Path | None = None) -> list[dict[str, Any]]:
                 "pass": passed,
             }
             results.append(result)
+            if preview is not None:
+                preview.update(rgb, result)
             print(
                 f"seed={seed} scenario={name} drawer_truth={truth_position:.3f} "
                 f"visual_state={estimate['state']} confidence={estimate['confidence']:.2f} "
                 f"{'PASS' if passed else 'FAIL'}"
             )
+    if preview is not None:
+        preview.hold()
     return results
 
 
@@ -144,13 +155,86 @@ def _configure_visual_variation(
         pixels[:] = np.clip(luminance * np.array([0.9, 0.95, 1.0]), 0, 255).astype(np.uint8)
 
 
+class _CameraPreview:
+    """Interactive display for the exact RGB frame passed to perception."""
+
+    def __init__(self, frame_delay: float) -> None:
+        """Create a Matplotlib window without changing simulation state.
+
+        Args:
+            frame_delay: Seconds to show each evaluation sample.
+        """
+        if frame_delay <= 0:
+            raise ValueError("frame delay must be positive")
+        from matplotlib import pyplot
+
+        self._pyplot = pyplot
+        self._frame_delay = frame_delay
+        self._patches: list[Any] = []
+        pyplot.ion()
+        self._figure, self._axes = pyplot.subplots(num="Drawer perception camera")
+        self._image = self._axes.imshow(np.zeros((480, 640, 3), dtype=np.uint8))
+        self._axes.set_axis_off()
+        self._figure.tight_layout()
+
+    def update(self, rgb: np.ndarray, result: dict[str, Any]) -> None:
+        """Show one observation with detected image geometry overlaid.
+
+        Args:
+            rgb: Exact RGB observation supplied to the estimator.
+            result: Evaluation result and visual measurements for the frame.
+        """
+        if not self._pyplot.fignum_exists(self._figure.number):
+            return
+        from matplotlib.patches import Rectangle
+
+        self._image.set_data(rgb)
+        for patch in self._patches:
+            patch.remove()
+        self._patches.clear()
+        measurement = result["measurement"]
+        for key, color in (("drawer_bbox", "lime"), ("housing_bbox", "cyan")):
+            if key not in measurement:
+                continue
+            x0, y0, x1, y1 = measurement[key]
+            patch = Rectangle(
+                (x0, y0), x1 - x0 + 1, y1 - y0 + 1, fill=False, edgecolor=color, linewidth=2
+            )
+            self._axes.add_patch(patch)
+            self._patches.append(patch)
+        self._axes.set_title(
+            f"{result['scenario']} | {result['drawer_truth'] * 1000:.0f} mm | "
+            f"visual={result['visual_state']} ({result['confidence']:.2f}) | "
+            f"truth={result['truth_state']}"
+        )
+        self._figure.canvas.draw_idle()
+        self._pyplot.pause(self._frame_delay)
+
+    def hold(self) -> None:
+        """Keep the final camera observation visible until the window is closed."""
+        if self._pyplot.fignum_exists(self._figure.number):
+            self._pyplot.ioff()
+            self._pyplot.show()
+
+
 def main() -> None:
     """Run evaluation and optionally write detailed JSON and debug frames."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", type=Path, help="optional detailed JSON output path")
     parser.add_argument("--debug-dir", type=Path, help="optional rendered-frame directory")
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="show the exact camera frames and detected geometry during evaluation",
+    )
+    parser.add_argument(
+        "--frame-delay",
+        type=float,
+        default=0.35,
+        help="seconds per preview frame (default: 0.35)",
+    )
     args = parser.parse_args()
-    results = run_evaluation(args.debug_dir)
+    results = run_evaluation(args.debug_dir, show=args.show, frame_delay=args.frame_delay)
     summary = summarize(results)
     print(json.dumps(summary, indent=2))
     if args.json is not None:
