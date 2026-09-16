@@ -82,7 +82,10 @@ def estimate_drawer_state(rgb: np.ndarray) -> dict[str, Any]:
     # blue-gray fixed housing rather than relying on a fixed image region.
     drawer_mask = (red / green > 1.25) & (green / blue > 1.08) & (red > 24.0)
     housing_mask = (
-        (green / red > 1.14) & (blue / green > 1.12) & (blue / green < 1.25) & (red > 20.0)
+        (green / red > 1.17)
+        & (blue / green > 1.12)
+        & (blue / green < 1.22)
+        & (red > 20.0)
     )
 
     drawer = _largest_component(drawer_mask)

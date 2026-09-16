@@ -120,14 +120,36 @@ class DrawerController(Handoff):
         print(json.dumps(row), flush=True)
 
     def plan_grasp(self, arm, center):
-        """Use the existing calibrated jaw alignment in a private planning model."""
+        """Plan drawer grasps with a small robust depth bias for the object.
+
+        Args:
+            arm: ``left`` for the handle grasp or ``right`` for the object grasp.
+            center: World-frame grasp center of the handle or object.
+
+        Returns:
+            Named full-model actuator targets for the automatic grasp sequence.
+        """
         backend = self.backends[arm]
         scratch = mujoco.MjData(backend.local)
+
         adr = backend.local.jnt_qposadr[backend.local.joint("target_joint").id]
+
         scratch.qpos[adr : adr + 3] = backend.rotation.T @ (center - backend.base)
+
         mujoco.mj_forward(backend.local, scratch)
+
+        # The drawer object needs 1.5 mm more grasp depth.
+        # Keep the left drawer-handle grasp unchanged.
+        grasp_depth_bias = 0.0015 if arm == "right" else 0.0
+
         with contextlib.redirect_stdout(io.StringIO()):
-            targets = grasp.get_validated_auto_targets(backend.local, scratch, backend.local_site)
+            targets = grasp.get_validated_auto_targets(
+                backend.local,
+                scratch,
+                backend.local_site,
+                grasp_depth_bias=grasp_depth_bias,
+            )
+
         return {name: backend.expand(q) for name, q in targets.items()}
 
     def translate(self, arm, delta, duration=4, required=()):
@@ -257,7 +279,13 @@ class DrawerController(Handoff):
         self.move("right", opened, 4, ("left",))
         self.hold(0.5, ("left",))
         self.mark("RIGHT_RETREAT")
+
+        # Lift clear of the placed object and left arm before the normal retreat.
+        self.translate("right", [0, 0, 0.015], 2, ("left",))
+
+        # Keep the existing retreat after gaining clearance.
         self.translate("right", [0.06, 0, 0.03], 4, ("left",))
+
         self.move("right", grasp.PRESET_POSES["HOME"], 4, ("left",))
 
     def release_drawer_sequence(self):

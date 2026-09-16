@@ -538,14 +538,28 @@ def get_validated_auto_targets(
     model: mujoco.MjModel,
     data: mujoco.MjData,
     site_id: int,
+    grasp_depth_bias: float = 0.0,
 ) -> dict[str, np.ndarray]:
-    """Validate automatic sequence targets against MuJoCo actuator control limits."""
+    """Validate automatic sequence targets against MuJoCo actuator control limits.
+
+    Args:
+        model: MuJoCo model used for IK and actuator-limit checks.
+        data: MuJoCo data containing the current object pose.
+        site_id: End-effector site used to solve grasp geometry.
+        grasp_depth_bias: Extra downward site offset in meters. Zero keeps the
+            calibrated jaw height; a positive value deepens only this grasp.
+
+    Returns:
+        Named actuator targets for the automatic grasp sequence.
+    """
     cube_geom_id = get_cube_geom_id(model)
     finger_geom_ids = get_finger_collision_geom_ids(model)
     cube_pos = data.body("target").xpos.copy()
     cube_size = model.geom_size[cube_geom_id].copy()
     grasp_site_target = cube_pos.copy()
-    grasp_site_target[2] = cube_pos[2] + GRASP_SITE_OFFSET_ABOVE_JAW_MIDPOINT
+    grasp_site_target[2] = (
+        cube_pos[2] + GRASP_SITE_OFFSET_ABOVE_JAW_MIDPOINT - grasp_depth_bias
+    )
     home_target = get_named_pose_target(model, "HOME")
     open_home_target = get_gripper_target(model, home_target, GRIPPER_OPEN_VALUE)
     above_object_target = solve_site_position_ik(
