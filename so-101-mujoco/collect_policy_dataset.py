@@ -1,14 +1,31 @@
 """Collect live planner decisions for the baseline and randomized drawer episodes."""
 
 import argparse
+import copy
 import json
 from pathlib import Path
 
+import mujoco
 from matplotlib import image
 
 from bimind.instruction import DEFAULT_INSTRUCTION, parse_instruction
+from bimind.observation import build_observation
+from bimind.perception import estimate_drawer_state, render_camera
+from bimind.planner import next_action
 from bimind.skills import Skills
+from evaluate_drawer_perception import _configure_visual_variation
 from planner_drawer_task import run_task
+
+VARIATIONS = (
+    ("baseline", 1.0, (0, 0, 0), (0, 0), "original"),
+    ("lighting_low", 0.7, (0, 0, 0), (0, 0), "original"),
+    ("lighting_high", 1.3, (0, 0, 0), (0, 0), "original"),
+    ("camera_left", 1.0, (-0.01, 0.005, 0), (0, 0), "original"),
+    ("camera_right", 1.0, (0.01, -0.005, 0.005), (0, 0), "original"),
+    ("world_x", 1.0, (0, 0, 0), (0.01, 0), "original"),
+    ("world_y", 1.0, (0, 0, 0), (0, -0.01), "original"),
+    ("background_gray", 1.0, (0, 0, 0), (0, 0), "gray"),
+)
 
 
 def collect(
@@ -35,25 +52,90 @@ def collect(
     output.mkdir(parents=True, exist_ok=True)
     records = []
 
-    def save(rgb, observation, action, episode):
+    def save(rgb, observation, action, episode, scenario=None):
         """Write a single live RGB frame and the teacher decision for that step."""
         number = len(records)
         filename = f"frame_{number:06d}.png"
         image.imsave(output / filename, rgb)
-        records.append(
-            {
-                "rgb": filename,
-                "instruction": instruction,
-                "observation": observation,
-                "teacher_next_skill": action["skill"].lower(),
-                "teacher_args": action["args"],
-                "episode": episode,
-            }
-        )
 
-    def record_step(rgb, observation, action, episode_name):
-        """Store exactly one live sample per planner decision."""
-        save(rgb, observation, action, episode_name)
+        row = {
+            "rgb": filename,
+            "instruction": instruction,
+            "observation": observation,
+            "teacher_next_skill": action["skill"].lower(),
+            "teacher_args": action["args"],
+            "episode": episode,
+        }
+
+        if scenario is not None:
+            row["scenario"] = scenario
+
+        records.append(row)
+
+    def record_baseline_step(rgb, observation, action, skills, episode_name):
+        for scenario, light, camera, world, background in VARIATIONS:
+            model = copy.copy(skills._controller.model)
+            data = copy.copy(skills._controller.data)
+
+            _configure_visual_variation(
+                model,
+                light,
+                camera,
+                world,
+                background,
+            )
+
+            mujoco.mj_forward(model, data)
+            frame = render_camera(model, data)
+
+            varied = copy.deepcopy(observation)
+            estimate = estimate_drawer_state(frame)
+
+            varied["drawer"] = {
+                "visual_state": estimate["state"],
+                "confidence": estimate["confidence"],
+            }
+
+            save(
+                frame,
+                varied,
+                next_action(varied, confidence_threshold),
+                episode_name,
+                scenario=scenario,
+            )
+
+        if action["skill"] == "open_drawer":
+            for position in (0.01, 0.03, 0.04):
+                model = copy.copy(skills._controller.model)
+                data = copy.copy(skills._controller.data)
+
+                data.qpos[
+                    model.joint("drawer_slide").qposadr[0]
+                ] = position
+
+                mujoco.mj_forward(model, data)
+                frame = render_camera(model, data)
+
+                varied = build_observation(
+                    instruction,
+                    estimate_drawer_state(frame),
+                    skills.get_scene_state(),
+                )
+
+                save(
+                    frame,
+                    varied,
+                    next_action(varied, confidence_threshold),
+                    episode_name,
+                )
+
+    def record_randomized_step(rgb, observation, action, episode_name):
+        save(
+            rgb,
+            observation,
+            action,
+            episode_name,
+        )
 
     for episode in range(runs):
         skills = Skills(scene="drawer")
@@ -62,8 +144,14 @@ def collect(
                 skills,
                 instruction=instruction,
                 confidence_threshold=confidence_threshold,
-                on_step=lambda rgb, observation, action, episode_name=episode: record_step(
-                    rgb, observation, action, episode_name
+                on_step=lambda rgb, observation, action, skills=skills, episode_name=episode: (
+                    record_baseline_step(
+                        rgb,
+                        observation,
+                        action,
+                        skills,
+                        episode_name,
+                    )
                 ),
             )
             if not report["success"]:
@@ -82,8 +170,13 @@ def collect(
                 skills,
                 instruction=instruction,
                 confidence_threshold=confidence_threshold,
-                on_step=lambda rgb, observation, action, episode_name=episode_name: record_step(
-                    rgb, observation, action, episode_name
+                on_step=lambda rgb, observation, action, episode_name=episode_name: (
+                    record_randomized_step(
+                        rgb,
+                        observation,
+                        action,
+                        episode_name,
+                    )
                 ),
             )
             if not report["success"]:
