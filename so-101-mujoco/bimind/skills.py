@@ -10,6 +10,7 @@ from dual_pick_place import check_runtime, verify_layout
 from viewer_lifecycle import ViewerClosed, check_viewer
 
 from .controllers import DrawerController, ObjectController
+from .randomization import apply_randomization
 
 
 class Skills:
@@ -18,18 +19,31 @@ class Skills:
     Args:
         scene: ``drawer`` for retrieval or ``handoff`` for free-cube manipulation.
         viewer: Whether to display the same physical execution in a viewer.
+        seed: Optional deterministic randomization for a fresh drawer scene.
     """
 
-    def __init__(self, scene: str = "drawer", viewer: bool = False):
+    def __init__(self, scene: str = "drawer", viewer: bool = False, seed: int | None = None):
         """Load the selected scene and enforce the validated runtime before motion."""
         if scene not in ("drawer", "handoff"):
             raise ValueError(f"Unknown scene: {scene}")
+        if seed is not None and scene != "drawer":
+            raise ValueError("Seed randomization is supported only for drawer scenes")
         self.runtime = check_runtime()
         self.scene = scene
         self._controller = (
             DrawerController(viewer) if scene == "drawer" else ObjectController(viewer)
         )
         verify_layout(self._controller.model)
+        self.randomization = None
+        if seed is not None:
+            try:
+                self.randomization = apply_randomization(
+                    self._controller.model, self._controller.data, seed
+                )
+                self._controller.initial_object = self._controller.position()
+            except Exception:
+                self.close()
+                raise
         self._stage = "new"
         self._owner = None
         self._failure = None
