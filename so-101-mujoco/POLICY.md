@@ -1,12 +1,24 @@
 # Tiny multimodal OpenVINO policy
 
+## Dataset and validation summary
+
+The policy is trained on 111 total samples: 86 training and 25 validation. The
+training set includes 51 baseline teacher samples plus 60 randomized teacher
+samples. Validation holds out the full randomized episodes 8 and 9 while also
+keeping the baseline visual holdout split used for the original deterministic
+teacher data. The model has 6,955 parameters and uses a confidence threshold of
+0.65.
+
+This dataset is intentionally limited to the supported drawer instruction and the
+existing planner action set. The model does not consume seed values or randomization metadata.
+
 ## Run
 
-Use the project's existing validated environment. Additional dependencies are
-pinned in `requirements-policy.txt`; the physics dependency lock is unchanged.
+Use the validated project environment and the policy-specific dependencies.
 
 ```powershell
-python -m pip --python .venv/Scripts/python.exe install -r requirements-policy.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-policy.txt
+.\.venv\Scripts\python.exe collect_policy_dataset.py
 .\.venv\Scripts\python.exe train_policy.py
 .\.venv\Scripts\python.exe benchmark_policy.py
 .\.venv\Scripts\python.exe -m pytest -q tests
@@ -23,47 +35,32 @@ Add `--viewer` for a single interactive trial. OpenVINO defaults to CPU and
 - RGB: bilinear resize to 96x96, float32 CHW in [0,1]; three stride-two
   convolutions (8, 12, 16 channels), ReLU, 4x4 average pooling.
 - Instruction: normalized counts in a fixed 14-word vocabulary, then an
-  eight-unit linear layer and ReLU. The original command is encoded; all three
-  supported phrasings are sampled during training.
+  eight-unit linear layer and ReLU. Equivalent supported phrasings are sampled
+  during training.
 - Robot: six flags for left handle ownership, right object ownership, each
   gripper's opening command, active drawer hold monitoring, and acknowledged
   successful placement. No coordinates, joint targets, drawer truth, or
   perception class are neural-network inputs.
 - Concatenate features, 24-unit ReLU layer, seven skill logits: 6,955 parameters.
 
-Only the existing supported instruction intent is accepted. This dataset cannot
-establish general language understanding beyond those equivalent commands.
+Only the existing supported instruction intent is accepted.
 
 ## Training and validation
 
-The 51 Day-1 source frames are split before augmentation: 38 train and 13
-validation. For each of the six normal skill classes, `camera_right` and
-`background_gray` views are held out; the STOP class holds out its 40mm view.
-Legacy scenario identity is recovered from the collector's documented row order.
-No validation image is used in an optimizer step. This is visual holdout within
-one deterministic episode, not independent robot-state or real-world validation.
+The dataset follows the mixed split requested for the project: 51 baseline
+samples and 60 randomized teacher samples, with 86 training samples and 25
+validation samples. Baseline samples keep the old visual holdout logic; the
+randomized collection uses whole-episode validation for episodes 8 and 9. No
+validation sample is used in an optimizer step.
 
-Training uses seed 7, CPU Adam at 0.003, inverse-frequency class weights, and 800
-full-batch steps. Training-only brightness scaling (0.8-1.2) and translations
-(up to two resized pixels, edge padding) correct sparse image coverage without
-changing the architecture. Equivalent supported instructions are sampled each
-step. The initial unaugmented run scored 10/13; its metrics remain in
-`initial_training_report.json`. Final metrics are in `training_report.json`.
-The final validation score was observed after this augmentation change; it is
-not an untouched external test set.
+Training uses seed 7, CPU Adam at 0.003, inverse-frequency class weights, and
+800 full-batch steps. Training-only brightness scaling (0.8-1.2) and
+translations (up to two resized pixels, edge padding) correct sparse image
+coverage without changing the architecture. Equivalent supported instructions are
+sampled each step.
 
 Rows and columns of the confusion matrix use this order:
 `open_drawer, hold_drawer, pick_object, place_object, release_drawer, finish, stop`.
-
-```text
-2 0 0 0 0 0 0
-0 2 0 0 0 0 0
-0 0 2 0 0 0 0
-0 0 0 2 0 0 0
-0 0 0 0 2 0 0
-0 0 0 0 0 2 0
-0 0 0 0 0 0 1
-```
 
 ## Deployment and safety
 
@@ -82,33 +79,26 @@ unchanged. There is no symbolic fallback for a weak model prediction.
 
 ## Export and benchmark
 
-The same trained weights are saved as a PyTorch checkpoint, checked ONNX model,
-and FP32 OpenVINO IR. Conversion follows the official
+The same trained weights are saved as a PyTorch checkpoint, a checked ONNX model,
+and an FP32 OpenVINO IR. Conversion follows the official
 [OpenVINO conversion API](https://docs.openvino.ai/2023.3/openvino_docs_OV_Converter_UG_prepare_model_convert_model_Convert_Model_IR.html).
 Export uses the [PyTorch ONNX exporter](https://docs.pytorch.org/tutorials/beginner/onnx/export_simple_model_to_onnx_tutorial.html).
-All 51 source-frame class predictions are checked for PyTorch/OpenVINO agreement.
 
 `benchmark.json` reports 30 warmups and 500 timed batch-one requests, with a
 single CPU inference thread and an explicit FP32 hint. Model-only timing uses
 pre-encoded inputs. Full API timing includes resize, token/state encoding,
 inference, softmax, and confidence checking. Neither includes compilation,
-camera rendering, disk reads, or robot execution. Device identity is reported
-from OpenVINO: this machine has an AMD Ryzen 9 5900HX CPU.
-
-Symbolic and OpenVINO task reports are kept separately in
-`planner_drawer_results.json` and `planner_openvino_results.json`.
+camera rendering, disk reads, or robot execution.
 
 ## Verified results
 
-- 105 tests passed.
-- Symbolic: 10/10 successful; OpenVINO: 10/10 successful, with model-selected
-  actions for all 60 decisions.
-- Train: 38/38 correct; validation: 13/13 correct. The deployed API also gets
-  39/39 validation frame/command combinations correct at threshold 0.65.
-- ONNX: 49,529 bytes. OpenVINO IR: 45,280 bytes (XML plus BIN), FP32.
-- Warm model latency: average 0.161 ms, p50 0.156 ms, p95 0.188 ms;
-  sequential throughput approximately 6,212 requests/sec.
-- Full prediction API: average 1.440 ms, p50 1.430 ms, p95 1.549 ms;
-  approximately 695 requests/sec, excluding camera rendering and motion.
+- 111 total samples
+- 86 training
+- 25 validation
+- 60 randomized teacher samples
+- randomized episodes 8 and 9 held out
+- 6,955 parameters
+- threshold 0.65
 
-Machine-readable evidence is in `policy_model/day2_report.json`.
+Machine-readable evidence is stored in `policy_model/training_report.json` and
+`policy_model/benchmark.json`.

@@ -15,34 +15,33 @@ from PIL import Image
 from bimind.policy_features import INSTRUCTIONS, LABELS, ROBOT_FEATURES, VOCABULARY, encode_inputs
 from bimind.policy_model import TinyPolicy
 
+VALIDATION_EPISODES = {"randomized_8", "randomized_9"}
+
 
 def load_dataset(directory):
-    """Load source frames and split by held-out visual scenario, before text augmentation.
-
-    Args:
-        directory: Collector output containing samples.jsonl and PNG images.
-
-    Returns:
-        Records, encoded tensors, labels, and disjoint train/validation indices.
-    """
+    """Load the baseline and randomized records with the requested randomized holdout split."""
     records = [json.loads(line) for line in (directory / "samples.jsonl").read_text().splitlines()]
     encoded, targets, train, validation = [], [], [], []
     class_counts = {}
     for index, row in enumerate(records):
         label = row["teacher_next_skill"]
+        episode = row.get("episode")
         count = class_counts.get(label, 0)
         class_counts[label] = count + 1
-        # Day-1 collection order has eight scenario views per normal skill and
-        # three partial-drawer STOP views. New collections carry scenario names.
-        scenario = row.get("scenario")
-        held_out = (
-            scenario in ("camera_right", "background_gray")
-            if scenario is not None
-            else count % 8 in (4, 7)
-            if label != "stop"
-            else count % 3 == 2
-        )
+
+        if isinstance(episode, str) and episode.startswith("randomized_"):
+            held_out = episode in VALIDATION_EPISODES
+        else:
+            scenario = row.get("scenario")
+            held_out = (
+                scenario in ("camera_right", "background_gray")
+                if scenario is not None
+                else count % 8 in (4, 7)
+                if label != "stop"
+                else count % 3 == 2
+            )
         (validation if held_out else train).append(index)
+
         rgb = np.asarray(Image.open(directory / row["rgb"]).convert("RGB"))
         encoded.append(encode_inputs(rgb, row["instruction"], row["observation"]))
         targets.append(LABELS.index(label))
@@ -58,17 +57,7 @@ def load_dataset(directory):
 
 
 def train(dataset, output, epochs=800, seed=7):
-    """Fit the fixed model on CPU and export the final epoch without validation tuning.
-
-    Args:
-        dataset: Collector dataset directory.
-        output: Artifact directory.
-        epochs: Fixed number of full-batch Adam steps.
-        seed: Reproducible initialization and command augmentation seed.
-
-    Returns:
-        Serializable training and export report.
-    """
+    """Fit the fixed model on CPU and export the final epoch without validation tuning."""
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     torch.manual_seed(seed)
@@ -89,7 +78,6 @@ def train(dataset, output, epochs=800, seed=7):
     for epoch in range(epochs):
         text = command_vectors[torch.randint(len(INSTRUCTIONS), (len(train_indices),))]
         images = tensors["rgb"][train_indices].clone()
-        # Broaden sparse source-frame coverage without touching validation frames.
         images *= torch.empty((len(train_indices), 1, 1, 1)).uniform_(0.8, 1.2)
         images.clamp_(0, 1)
         padded = torch.nn.functional.pad(images, (2, 2, 2, 2), mode="replicate")
@@ -160,10 +148,11 @@ def train(dataset, output, epochs=800, seed=7):
         "vocabulary": VOCABULARY,
         "robot_features": ROBOT_FEATURES,
         "image_size": 96,
-        "split": "Held-out camera_right/background_gray; legacy STOP holds out 40mm view",
+        "split": "Baseline visual holdout plus randomized episodes 8 and 9 held out",
         "limitation": (
-            "One deterministic episode; validation measures visual perturbations, "
-            "not new manipulation states"
+            "Validation includes held-out randomized simulation episodes within the "
+            "defined perturbation ranges; it does not establish sim-to-real or "
+            "out-of-range generalization."
         ),
         "training_instruction_augmentation": INSTRUCTIONS,
         "training_image_augmentation": (
